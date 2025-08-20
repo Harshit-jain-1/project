@@ -238,13 +238,11 @@
       "metadata": {
         "id": "T-QzKieBC-VL"
       },
-      "cell_type": "code",
-      "execution_count": null,
-      "metadata": {},
-      "outputs": [],
-      "source": [
+      {
+        "cell_type": "code",
+        "execution_count": null,
         ...
-      ]
+      }
     }
   ]
 }
