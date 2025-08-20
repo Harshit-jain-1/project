@@ -241,7 +241,6 @@
       {
         "cell_type": "code",
         "execution_count": null,
-        ...
       }
     }
   ]
