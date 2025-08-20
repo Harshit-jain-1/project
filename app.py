@@ -214,7 +214,7 @@
       "metadata": {
         "id": "0t3I1WxSL93t"
       },
-      "execution_count": null,
+      "execution_count": None,
       "outputs": []
     }
   ]
