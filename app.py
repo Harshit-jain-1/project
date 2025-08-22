@@ -66,37 +66,41 @@ if st.button("Run"):
         ax2.legend()
         st.pyplot(fig2)
 
-        data = df.filter(['Close']).dropna()  # <-- DROP NaNs here
-        dataset = data.values
+       data = df.filter(['Close']).dropna()
+dataset = data.values
 
-        if len(dataset) < 60:
-            st.warning("Not enough data to run LSTM prediction (need at least 60 data points).")
-        else:
-            scaler = MinMaxScaler(feature_range=(0, 1))
-            scaled_data = scaler.fit_transform(dataset)
+# Remove any rows with NaN or inf in dataset
+dataset = dataset[~np.isnan(dataset).any(axis=1)]
+dataset = dataset[~np.isinf(dataset).any(axis=1)]
 
-            training_data_len = int(np.ceil(len(dataset) * 0.8))
-            test_data = scaled_data[training_data_len - 60:]
+if len(dataset) < 60:
+    st.warning("Not enough data to run LSTM prediction (need at least 60 data points).")
+else:
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_data = scaler.fit_transform(dataset)
 
-            X_test = []
-            for i in range(60, len(test_data)):
-                X_test.append(test_data[i-60:i, 0])
-            X_test = np.array(X_test)
-            X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+    training_data_len = int(np.ceil(len(dataset) * 0.8))
+    test_data = scaled_data[training_data_len - 60:]
 
-            model = load_lstm_model()
-            predictions = model.predict(X_test)
-            predictions = scaler.inverse_transform(predictions)
+    X_test = []
+    for i in range(60, len(test_data)):
+        X_test.append(test_data[i-60:i, 0])
+    X_test = np.array(X_test)
+    X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 
-            valid = data.iloc[training_data_len:].copy()
-            valid['Predictions'] = predictions
+    model = load_lstm_model()
+    predictions = model.predict(X_test)
+    predictions = scaler.inverse_transform(predictions)
 
-            st.subheader("🤖 LSTM Stock Price Prediction")
-            fig3, ax3 = plt.subplots(figsize=(10, 4))
-            ax3.plot(data.index, data['Close'], label='Actual Price')
-            ax3.plot(valid.index, valid['Predictions'], label='Predicted Price', color='orange')
-            ax3.set_title("LSTM Prediction vs Actual Price")
-            ax3.set_xlabel("Date")
-            ax3.set_ylabel("Price ($)")
-            ax3.legend()
-            st.pyplot(fig3)
+    valid = data.iloc[training_data_len:].copy()
+    valid['Predictions'] = predictions
+
+    st.subheader("🤖 LSTM Stock Price Prediction")
+    fig3, ax3 = plt.subplots(figsize=(10, 4))
+    ax3.plot(data.index, data['Close'], label='Actual Price')
+    ax3.plot(valid.index, valid['Predictions'], label='Predicted Price', color='orange')
+    ax3.set_title("LSTM Prediction vs Actual Price")
+    ax3.set_xlabel("Date")
+    ax3.set_ylabel("Price ($)")
+    ax3.legend()
+    st.pyplot(fig3)
