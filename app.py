@@ -15,29 +15,90 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
-import talib  # for RSI if you wish
+import talib
 
-st.title("Stock Trend & LSTM Prediction App")
+st.set_page_config(page_title="Stock Price Forecast", layout="wide")
+st.title("📈 Stock Trend & LSTM Price Prediction App")
 
-ticker = st.text_input("Stock Symbol:", "AAPL")
+# --- User Inputs ---
+ticker = st.text_input("Enter Stock Ticker", "AAPL")
 start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
 end_date = st.date_input("End Date", pd.to_datetime("today"))
 
+# --- Load Model ---
+@st.cache_resource
+def load_lstm_model():
+    return load_model("lstm_stock_model.h5")
+
+# --- On Button Click ---
 if st.button("Run"):
     df = yf.download(ticker, start=start_date, end=end_date)
-    st.write("Data Head:", df.head())
-    
-    df['MA50'] = df['Close'].rolling(50).mean()
-    df['RSI'] = talib.RSI(df['Close'], timeperiod=14)
-    
-    fig, ax = plt.subplots()
-    ax.plot(df['Close'], label="Close")
-    ax.plot(df['MA50'], label="MA 50")
-    ax.legend()
-    st.pyplot(fig)
-    
-    model = load_model("lstm_stock_model.h5")
-    scaler = MinMaxScaler()
-    # Prepare data for LSTM (similar to training pipeline)
-    # Predict and plot actual vs. predicted...
 
+    if df.empty:
+        st.error("No data found. Check ticker or date range.")
+    else:
+        st.success(f"Loaded {len(df)} rows for {ticker}.")
+
+        # --- Indicators ---
+        df['MA50'] = df['Close'].rolling(window=50).mean()
+        df['RSI'] = talib.RSI(df['Close'].astype(float).values, timeperiod=14)
+
+        # --- Plot Price + MA50 ---
+        st.subheader("📊 Close Price with MA50")
+        fig1, ax1 = plt.subplots()
+        ax1.plot(df.index, df['Close'], label="Close")
+        ax1.plot(df.index, df['MA50'], label="MA50")
+        ax1.set_xlabel("Date")
+        ax1.set_ylabel("Price ($)")
+        ax1.legend()
+        st.pyplot(fig1)
+
+        # --- Plot RSI ---
+        st.subheader("📉 RSI Indicator")
+        fig2, ax2 = plt.subplots()
+        ax2.plot(df.index, df['RSI'], label="RSI", color="purple")
+        ax2.axhline(70, linestyle="--", color="red")
+        ax2.axhline(30, linestyle="--", color="green")
+        ax2.set_ylim(0, 100)
+        ax2.set_ylabel("RSI")
+        ax2.legend()
+        st.pyplot(fig2)
+
+        # --- LSTM Prediction ---
+        st.subheader("🤖 LSTM Stock Price Prediction")
+        
+        # Use only Close price
+        data = df.filter(['Close'])
+        dataset = data.values
+        training_data_len = int(np.ceil(len(dataset) * 0.8))
+
+        # Scale
+        scaler = MinMaxScaler(feature_range=(0,1))
+        scaled_data = scaler.fit_transform(dataset)
+
+        # Create test data
+        test_data = scaled_data[training_data_len - 60:]
+        X_test = []
+        for i in range(60, len(test_data)):
+            X_test.append(test_data[i-60:i, 0])
+        X_test = np.array(X_test)
+        X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+
+        # Predict
+        model = load_lstm_model()
+        predictions = model.predict(X_test)
+        predictions = scaler.inverse_transform(predictions)
+
+        # Create final prediction df
+        valid = data[training_data_len:]
+        valid['Predictions'] = predictions
+
+        # --- Plot predictions vs actual ---
+        fig3, ax3 = plt.subplots()
+        ax3.plot(data.index, data['Close'], label='Actual')
+        ax3.plot(valid.index, valid['Predictions'], label='Predicted', color='orange')
+        ax3.set_title("LSTM Prediction vs Actual")
+        ax3.set_xlabel("Date")
+        ax3.set_ylabel("Price ($)")
+        ax3.legend()
+        st.pyplot(fig3)
