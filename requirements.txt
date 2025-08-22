@@ -6,5 +6,4 @@ matplotlib
 scikit-learn
 tensorflow
 keras
-ta-lib
-pandas-ta
+plotly==5.22.0
