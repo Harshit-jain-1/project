@@ -114,29 +114,40 @@ if ticker:
             ax.legend()
             st.pyplot(fig)
 
-    # Live stock price chart with auto-refresh
-    st.subheader("📡 Live Stock Price Chart")
-    live_placeholder = st.empty()
+st.set_page_config(page_title="Live Stock Dashboard", layout="wide")
+st.title("📡 Live Stock Price Dashboard")
 
-    # Auto refresh every 'interval' seconds
-    count = st_autorefresh(interval=interval * 1000, limit=None, key="live_chart_refresh")
+# Autorefresh every 10 seconds (adjust as you want)
+count = st_autorefresh(interval=10_000, limit=None, key="live_refresh")
 
-    # Fetch live data and plot
-    try:
-        live_data = yf.download(ticker, period="1d", interval="1m")
-        if live_data.empty:
-            live_placeholder.warning("No live data available")
-        else:
-            live_data = live_data.tail(100)
-            fig, ax = plt.subplots(figsize=(10, 3))
-            ax.plot(live_data.index, live_data['Close'], label="Live Close Price")
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
-            fig.autofmt_xdate()
-            ax.set_xlabel("Time")
-            ax.set_ylabel("Price ($)")
-            ax.set_title(f"{ticker.upper()} - Real-time Price")
-            ax.legend()
-            live_placeholder.pyplot(fig)
-            plt.close(fig)
-    except Exception as e:
-        live_placeholder.error(f"Failed to load live data: {e}")
+# User input
+ticker = st.text_input("Enter Stock Ticker", value="AAPL")
+
+# Limit how many points to show
+max_points = 100
+
+if ticker:
+    # Fetch latest 1 day of 1-minute data
+    live_data = yf.download(ticker, period="1d", interval="1m")
+
+    if live_data.empty:
+        st.warning("No live data available for this ticker.")
+    else:
+        # Keep only last max_points rows
+        live_data = live_data.tail(max_points)
+
+        # Plotting
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(live_data.index, live_data['Close'], label='Close Price')
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Price ($)")
+        ax.set_title(f"{ticker.upper()} - Real-time Stock Price")
+        ax.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+
+        st.pyplot(fig)
+
+        # Show last update time
+        st.write(f"Last updated: {live_data.index[-1]}")
+
