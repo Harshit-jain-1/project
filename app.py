@@ -36,7 +36,7 @@ if st.button("Run"):
     ax.legend()
     st.pyplot(fig)
     
-    model = load_model("lstm_model.h5")
+    model = load_model("lstm_stock_model.h5")
     scaler = MinMaxScaler()
     # Prepare data for LSTM (similar to training pipeline)
     # Predict and plot actual vs. predicted...
