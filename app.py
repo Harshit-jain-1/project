@@ -15,31 +15,32 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
 
+# --- Page Configuration ---
 st.set_page_config(page_title="Stock Price Forecast", layout="wide")
 st.title("📈 Stock Trend & LSTM Price Prediction App")
 
-
+# --- RSI Calculation without talib ---
 def calculate_rsi(series, period=14):
     delta = series.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.rolling(window=period, min_periods=period).mean()
-    avg_loss = loss.rolling(window=period, min_periods=period).mean()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    avg_gain = gain.rolling(window=period).mean()
+    avg_loss = loss.rolling(window=period).mean()
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-
+# --- Load LSTM Model ---
 @st.cache_resource
 def load_lstm_model():
     return load_model("lstm_stock_model.h5")
-
 
 # --- User Inputs ---
 ticker = st.text_input("Enter Stock Ticker", "AAPL")
 start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
 end_date = st.date_input("End Date", pd.to_datetime("today"))
 
+# --- Run Prediction ---
 if st.button("Run"):
     df = yf.download(ticker, start=start_date, end=end_date)
 
@@ -48,28 +49,27 @@ if st.button("Run"):
     else:
         st.success(f"Loaded {len(df)} rows for {ticker}.")
 
-        # Indicators
+        # --- Technical Indicators ---
         df['MA50'] = df['Close'].rolling(window=50).mean()
         df['RSI'] = calculate_rsi(df['Close'])
 
-        # --- Plot: Close Price + MA50 ---
-        st.subheader("📊 Close Price with MA50")
+        # --- Plot 1: Close + MA50 ---
+        st.subheader("📊 Close Price with 50-Day Moving Average")
         fig1, ax1 = plt.subplots(figsize=(10, 4))
-        ax1.plot(df.index, df['Close'], label="Close Price")
-        ax1.plot(df.index, df['MA50'], label="MA50")
+        ax1.plot(df.index, df['Close'], label='Close')
+        ax1.plot(df.index, df['MA50'], label='MA50', color='orange')
         ax1.set_xlabel("Date")
-        ax1.set_ylabel("Price ($)")
+        ax1.set_ylabel("Price")
         ax1.legend()
         st.pyplot(fig1)
 
-        # --- Plot: RSI ---
+        # --- Plot 2: RSI ---
         st.subheader("📉 RSI Indicator")
         fig2, ax2 = plt.subplots(figsize=(10, 3))
-        ax2.plot(df.index, df['RSI'], label="RSI", color="purple")
-        ax2.axhline(70, linestyle="--", color="red")
-        ax2.axhline(30, linestyle="--", color="green")
-        ax2.set_ylim(0, 100)
-        ax2.set_ylabel("RSI")
+        ax2.plot(df.index, df['RSI'], label='RSI', color='purple')
+        ax2.axhline(70, linestyle='--', color='red')
+        ax2.axhline(30, linestyle='--', color='green')
+        ax2.set_ylim([0, 100])
         ax2.legend()
         st.pyplot(fig2)
 
@@ -77,41 +77,48 @@ if st.button("Run"):
         st.subheader("🤖 LSTM Stock Price Prediction")
 
         data = df.filter(['Close']).dropna()
-        dataset = data.values
+        dataset = data.values.astype('float64')  # Ensure float64
 
-        # Remove any rows with NaN or inf in dataset
+        # Remove NaNs and infs
         dataset = dataset[~np.isnan(dataset).any(axis=1)]
         dataset = dataset[~np.isinf(dataset).any(axis=1)]
 
+        # Reshape if needed (scikit-learn requires 2D input)
+        if dataset.ndim == 1:
+            dataset = dataset.reshape(-1, 1)
+
         if len(dataset) < 60:
-            st.warning("Not enough data to run LSTM prediction (need at least 60 data points).")
+            st.warning("Not enough data to run LSTM prediction (minimum 60 data points required).")
         else:
+            # Scale data
             scaler = MinMaxScaler(feature_range=(0, 1))
             scaled_data = scaler.fit_transform(dataset)
 
+            # Split for testing
             training_data_len = int(np.ceil(len(dataset) * 0.8))
             test_data = scaled_data[training_data_len - 60:]
 
+            # Prepare X_test
             X_test = []
             for i in range(60, len(test_data)):
                 X_test.append(test_data[i-60:i, 0])
             X_test = np.array(X_test)
-            X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+            X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
 
+            # Load model and predict
             model = load_lstm_model()
             predictions = model.predict(X_test)
             predictions = scaler.inverse_transform(predictions)
 
+            # Plot predictions
             valid = data.iloc[training_data_len:].copy()
             valid['Predictions'] = predictions
 
-            # --- Plot Predictions vs Actual ---
             fig3, ax3 = plt.subplots(figsize=(10, 4))
             ax3.plot(data.index, data['Close'], label='Actual Price')
             ax3.plot(valid.index, valid['Predictions'], label='Predicted Price', color='orange')
-            ax3.set_title("LSTM Prediction vs Actual Price")
+            ax3.set_title("LSTM Prediction vs Actual")
             ax3.set_xlabel("Date")
-            ax3.set_ylabel("Price ($)")
+            ax3.set_ylabel("Price")
             ax3.legend()
             st.pyplot(fig3)
-
