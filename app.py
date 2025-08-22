@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
 import time
+import matplotlib.dates as mdates  # For formatting dates on live plot
 
 # Page setup
 st.set_page_config(page_title="Stock Price Forecast", layout="wide")
@@ -35,12 +36,13 @@ def calculate_rsi(series, period=14):
 def load_lstm_model():
     return load_model("lstm_stock_model.h5")
 
-# --- User Inputs with unique keys ---
-ticker = st.text_input("Enter Stock Ticker", value="AAPL", key="ticker_input")
-start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"), key="start_date")
-end_date = st.date_input("End Date", pd.to_datetime("today"), key="end_date")
+# --- User Inputs ---
+ticker = st.text_input("Enter Stock Ticker", "AAPL")
+start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
+end_date = st.date_input("End Date", pd.to_datetime("today"))
 
-if st.button("Run", key="run_button"):
+# --- Run button ---
+if st.button("Run"):
     df = yf.download(ticker, start=start_date, end=end_date)
 
     if df.empty:
@@ -112,11 +114,11 @@ if st.button("Run", key="run_button"):
 
 st.subheader("📡 Live Stock Price Chart (1-minute updates)")
 
-interval = st.slider("Update interval (seconds):", 5, 60, 10, key="interval_slider")
+interval = st.slider("Update interval (seconds):", 5, 60, 10)
 placeholder = st.empty()
 max_points = 100
 
-if st.checkbox("Start Live Chart", key="live_chart_checkbox"):
+if st.checkbox("Start Live Chart"):
     while True:
         try:
             live_data = yf.download(ticker, period="1d", interval="1m")
@@ -126,12 +128,19 @@ if st.checkbox("Start Live Chart", key="live_chart_checkbox"):
 
                 fig_live, ax_live = plt.subplots(figsize=(10, 3))
                 ax_live.plot(live_data.index, live_data['Close'], label="Live Close Price")
+
+                # Format x-axis with proper time format
+                ax_live.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+                fig_live.autofmt_xdate()
+
                 ax_live.set_xlabel("Time")
                 ax_live.set_ylabel("Price ($)")
                 ax_live.set_title(f"{ticker.upper()} - Real-time Price")
                 ax_live.legend()
 
                 placeholder.pyplot(fig_live)
+                plt.close(fig_live)  # avoid memory leaks
+
             else:
                 placeholder.warning("No live data available.")
 
