@@ -11,16 +11,15 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
-from streamlit_autorefresh import st_autorefresh
+import time
 
 # Page setup
-st.set_page_config(page_title="Stock Price Dashboard", layout="wide")
-st.title("📈 Stock Trend & Live Price Dashboard")
+st.set_page_config(page_title="Stock Price Forecast", layout="wide")
+st.title("📈 Stock Trend & LSTM Price Prediction App")
 
-# RSI calculation function
+# --- Function to calculate RSI manually ---
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0)
@@ -31,123 +30,113 @@ def calculate_rsi(series, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
+# --- Load model only once ---
 @st.cache_resource
 def load_lstm_model():
     return load_model("lstm_stock_model.h5")
 
-# User inputs
-ticker = st.text_input("Enter Stock Ticker", "AAPL")
-start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
-end_date = st.date_input("End Date", pd.to_datetime("today"))
-interval = st.slider("Live Update Interval (seconds)", 5, 60, 10)
+# --- User Inputs with unique keys ---
+ticker = st.text_input("Enter Stock Ticker", value="AAPL", key="ticker_input")
+start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"), key="start_date")
+end_date = st.date_input("End Date", pd.to_datetime("today"), key="end_date")
 
-if ticker:
-    # Load historical data on button click
-    if st.button("Load Historical Data"):
-        df = yf.download(ticker, start=start_date, end=end_date)
-        if df.empty:
-            st.error("No data found for given ticker/date range")
-            st.stop()
+if st.button("Run", key="run_button"):
+    df = yf.download(ticker, start=start_date, end=end_date)
 
-        df['MA50'] = df['Close'].rolling(50).mean()
-        df['RSI'] = calculate_rsi(df['Close'])
-        st.session_state['historical_df'] = df
+    if df.empty:
+        st.error("No data found. Check ticker or date range.")
+        st.stop()
 
-        # Prepare LSTM prediction data
-        data = df[['Close']].dropna()
-        dataset = data.values.astype('float64')
-        dataset = dataset[~np.isnan(dataset).any(axis=1)]
-        dataset = dataset[~np.isinf(dataset).any(axis=1)]
+    df['MA50'] = df['Close'].rolling(50).mean()
+    df['RSI'] = calculate_rsi(df['Close'])
 
-        if dataset.ndim == 1:
-            dataset = dataset.reshape(-1, 1)
+    # --- Plot Close + MA50 ---
+    st.subheader("Close Price with MA50")
+    fig1, ax1 = plt.subplots(figsize=(10, 4))
+    ax1.plot(df.index, df['Close'], label='Close')
+    ax1.plot(df.index, df['MA50'], label='MA50', color='orange')
+    ax1.legend()
+    st.pyplot(fig1)
 
-        if len(dataset) < 60:
-            st.warning("Not enough data for LSTM prediction")
-            st.stop()
+    # --- Plot RSI ---
+    st.subheader("RSI Indicator")
+    fig2, ax2 = plt.subplots(figsize=(10, 3))
+    ax2.plot(df.index, df['RSI'], label='RSI', color='purple')
+    ax2.axhline(70, linestyle='--', color='red')
+    ax2.axhline(30, linestyle='--', color='green')
+    ax2.set_ylim(0, 100)
+    ax2.legend()
+    st.pyplot(fig2)
 
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_data = scaler.fit_transform(dataset)
-        train_len = int(np.ceil(len(dataset) * 0.8))
-        test_data = scaled_data[train_len - 60:]
+    # --- LSTM Prediction ---
+    data = df[['Close']].dropna()
+    dataset = data.values.astype('float64')
 
-        X_test = []
-        for i in range(60, len(test_data)):
-            X_test.append(test_data[i - 60:i, 0])
-        X_test = np.array(X_test).reshape(-1, 60, 1)
+    dataset = dataset[~np.isnan(dataset).any(axis=1)]
+    dataset = dataset[~np.isinf(dataset).any(axis=1)]
 
-        model = load_lstm_model()
-        predictions = scaler.inverse_transform(model.predict(X_test))
-        valid = data.iloc[train_len:].copy()
-        valid['Predictions'] = predictions.flatten()
-        st.session_state['valid'] = valid
-        st.session_state['data'] = data
+    if dataset.ndim == 1:
+        dataset = dataset.reshape(-1, 1)
 
-    # Show historical charts if loaded
-    if 'historical_df' in st.session_state:
-        df = st.session_state['historical_df']
+    if len(dataset) < 60:
+        st.warning("Not enough data for LSTM prediction (min 60 points).")
+        st.stop()
 
-        st.subheader("Close Price with MA50")
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(df.index, df['Close'], label='Close')
-        ax.plot(df.index, df['MA50'], label='MA50', color='orange')
-        ax.legend()
-        st.pyplot(fig)
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_data = scaler.fit_transform(dataset)
 
-        st.subheader("RSI Indicator")
-        fig, ax = plt.subplots(figsize=(10, 3))
-        ax.plot(df.index, df['RSI'], label='RSI', color='purple')
-        ax.axhline(70, linestyle='--', color='red')
-        ax.axhline(30, linestyle='--', color='green')
-        ax.set_ylim(0, 100)
-        ax.legend()
-        st.pyplot(fig)
+    train_len = int(np.ceil(len(dataset) * 0.8))
+    test_data = scaled_data[train_len - 60:]
 
-        if 'valid' in st.session_state and 'data' in st.session_state:
-            valid = st.session_state['valid']
-            data = st.session_state['data']
+    X_test = []
+    for i in range(60, len(test_data)):
+        X_test.append(test_data[i - 60:i, 0])
+    X_test = np.array(X_test).reshape(-1, 60, 1)
 
-            st.subheader("LSTM Prediction vs Actual")
-            fig, ax = plt.subplots(figsize=(10, 4))
-            ax.plot(data.index, data['Close'], label='Actual')
-            ax.plot(valid.index, valid['Predictions'], label='Predicted', color='orange')
-            ax.legend()
-            st.pyplot(fig)
+    model = load_lstm_model()
+    predictions = scaler.inverse_transform(model.predict(X_test))
 
-st.set_page_config(page_title="Live Stock Dashboard", layout="wide")
-st.title("📡 Live Stock Price Dashboard")
+    valid = data.iloc[train_len:].copy()
+    valid['Predictions'] = predictions.flatten()
 
-# Autorefresh every 10 seconds (adjust as you want)
-count = st_autorefresh(interval=10_000, limit=None, key="live_refresh")
+    st.subheader("LSTM Prediction vs Actual")
+    fig3, ax3 = plt.subplots(figsize=(10, 4))
+    ax3.plot(data.index, data['Close'], label='Actual')
+    ax3.plot(valid.index, valid['Predictions'], label='Predicted', color='orange')
+    ax3.legend()
+    st.pyplot(fig3)
 
-# User input
-ticker = st.text_input("Enter Stock Ticker", value="AAPL")
+# =======================
+# 📡 LIVE GRAPH SECTION
+# =======================
 
-# Limit how many points to show
+st.subheader("📡 Live Stock Price Chart (1-minute updates)")
+
+interval = st.slider("Update interval (seconds):", 5, 60, 10, key="interval_slider")
+placeholder = st.empty()
 max_points = 100
 
-if ticker:
-    # Fetch latest 1 day of 1-minute data
-    live_data = yf.download(ticker, period="1d", interval="1m")
+if st.checkbox("Start Live Chart", key="live_chart_checkbox"):
+    while True:
+        try:
+            live_data = yf.download(ticker, period="1d", interval="1m")
 
-    if live_data.empty:
-        st.warning("No live data available for this ticker.")
-    else:
-        # Keep only last max_points rows
-        live_data = live_data.tail(max_points)
+            if not live_data.empty:
+                live_data = live_data.tail(max_points)
 
-        # Plotting
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(live_data.index, live_data['Close'], label='Close Price')
-        ax.set_xlabel("Time")
-        ax.set_ylabel("Price ($)")
-        ax.set_title(f"{ticker.upper()} - Real-time Stock Price")
-        ax.legend()
-        plt.xticks(rotation=45)
-        plt.tight_layout()
+                fig_live, ax_live = plt.subplots(figsize=(10, 3))
+                ax_live.plot(live_data.index, live_data['Close'], label="Live Close Price")
+                ax_live.set_xlabel("Time")
+                ax_live.set_ylabel("Price ($)")
+                ax_live.set_title(f"{ticker.upper()} - Real-time Price")
+                ax_live.legend()
 
-        st.pyplot(fig)
+                placeholder.pyplot(fig_live)
+            else:
+                placeholder.warning("No live data available.")
 
-        # Show last update time
-        st.write(f"Last updated: {live_data.index[-1]}")
+            time.sleep(interval)
 
+        except Exception as e:
+            st.error(f"Live update failed: {e}")
+            break
