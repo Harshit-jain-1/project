@@ -13,131 +13,85 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
+import plotly.express as px
 import time
 
 # Page setup
 st.set_page_config(page_title="Stock Price Forecast", layout="wide")
-st.title("📈 Stock Trend & LSTM Price Prediction App")
+st.title("Stock Prediction & Live Price Monitor")
 
-# --- Function to calculate RSI manually ---
 def calculate_rsi(series, period=14):
     delta = series.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.rolling(window=period, min_periods=period).mean()
-    avg_loss = loss.rolling(window=period, min_periods=period).mean()
+    gain = delta.clip(lower=0); loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(period).mean(); avg_loss = loss.rolling(period).mean()
     rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    return 100 - (100 / (1 + rs))
 
-# --- Load model only once ---
 @st.cache_resource
-def load_lstm_model():
+def load_model_cached():
     return load_model("lstm_stock_model.h5")
 
-# --- User Inputs ---
-ticker = st.text_input("Enter Stock Ticker", "AAPL")
-start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
+ticker = st.text_input("Stock Ticker", "AAPL")
+start_date = st.date_input("Start Date", pd.to_datetime("2015‑01‑01"))
 end_date = st.date_input("End Date", pd.to_datetime("today"))
 
-# --- Run button ---
-if st.button("Run"):
+if st.button("Run Prediction"):
     df = yf.download(ticker, start=start_date, end=end_date)
-
     if df.empty:
-        st.error("No data found. Check ticker or date range.")
+        st.error("No data. Check ticker or dates.")
         st.stop()
 
     df['MA50'] = df['Close'].rolling(50).mean()
     df['RSI'] = calculate_rsi(df['Close'])
 
-    # --- Plot Close + MA50 ---
-    st.subheader("Close Price with MA50")
-    fig1, ax1 = plt.subplots(figsize=(10, 4))
-    ax1.plot(df.index, df['Close'], label='Close')
-    ax1.plot(df.index, df['MA50'], label='MA50', color='orange')
-    ax1.legend()
-    st.pyplot(fig1)
+    fig1, ax1 = plt.subplots(); ax1.plot(df['Close'], label='Close'); ax1.plot(df['MA50'], label='MA50')
+    ax1.legend(); st.pyplot(fig1)
 
-    # --- Plot RSI ---
-    st.subheader("RSI Indicator")
-    fig2, ax2 = plt.subplots(figsize=(10, 3))
-    ax2.plot(df.index, df['RSI'], label='RSI', color='purple')
+    fig2, ax2 = plt.subplots()
+    ax2.plot(df['RSI'], color='purple')
     ax2.axhline(70, linestyle='--', color='red')
     ax2.axhline(30, linestyle='--', color='green')
     ax2.set_ylim(0, 100)
-    ax2.legend()
     st.pyplot(fig2)
 
-    # --- LSTM Prediction ---
     data = df[['Close']].dropna()
     dataset = data.values.astype('float64')
-
     dataset = dataset[~np.isnan(dataset).any(axis=1)]
     dataset = dataset[~np.isinf(dataset).any(axis=1)]
-
     if dataset.ndim == 1:
         dataset = dataset.reshape(-1, 1)
-
     if len(dataset) < 60:
-        st.warning("Not enough data for LSTM prediction (min 60 points).")
-        st.stop()
+        st.warning("Not enough data (≥ 60 points needed)."); st.stop()
 
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(dataset)
-
-    train_len = int(np.ceil(len(dataset) * 0.8))
-    test_data = scaled_data[train_len - 60:]
-
-    X_test = []
-    for i in range(60, len(test_data)):
-        X_test.append(test_data[i - 60:i, 0])
-    X_test = np.array(X_test).reshape(-1, 60, 1)
-
-    model = load_lstm_model()
-    predictions = scaler.inverse_transform(model.predict(X_test))
-
+    scaler = MinMaxScaler((0, 1))
+    scaled = scaler.fit_transform(dataset)
+    train_len = int(np.ceil(len(dataset)*0.8))
+    test_data = scaled[train_len - 60:]
+    X_test = np.array([test_data[i-60:i, 0] for i in range(60, len(test_data))]).reshape(-1, 60, 1)
+    model = load_model_cached()
+    preds = scaler.inverse_transform(model.predict(X_test))
     valid = data.iloc[train_len:].copy()
-    valid['Predictions'] = predictions.flatten()
+    valid['Predictions'] = preds.flatten()
 
-    st.subheader("LSTM Prediction vs Actual")
-    fig3, ax3 = plt.subplots(figsize=(10, 4))
+    fig3, ax3 = plt.subplots()
     ax3.plot(data.index, data['Close'], label='Actual')
     ax3.plot(valid.index, valid['Predictions'], label='Predicted', color='orange')
-    ax3.legend()
-    st.pyplot(fig3)
+    ax3.legend(); st.pyplot(fig3)
 
-# =======================
-# 📡 LIVE GRAPH SECTION
-# =======================
+# ---------------- Live Chart Section ----------------
+st.subheader("Live 1-Minute Stock Price (Plotly)")
 
-st.subheader("📡 Live Stock Price Chart (1-minute updates)")
-
-interval = st.slider("Update interval (seconds):", 5, 60, 10)
+interval = st.slider("Update every (s)", 10, 60, 15)
 placeholder = st.empty()
-max_points = 100
+history = pd.DataFrame(columns=['Close'])
 
 if st.checkbox("Start Live Chart"):
     while True:
-        try:
-            live_data = yf.download(ticker, period="1d", interval="1m")
-
-            if not live_data.empty:
-                live_data = live_data.tail(max_points)
-
-                fig_live, ax_live = plt.subplots(figsize=(10, 3))
-                ax_live.plot(live_data.index, live_data['Close'], label="Live Close Price")
-                ax_live.set_xlabel("Time")
-                ax_live.set_ylabel("Price ($)")
-                ax_live.set_title(f"{ticker.upper()} - Real-time Price")
-                ax_live.legend()
-
-                placeholder.pyplot(fig_live)
-            else:
-                placeholder.warning("No live data available.")
-
-            time.sleep(interval)
-
-        except Exception as e:
-            st.error(f"Live update failed: {e}")
-            break
+        live = yf.download(ticker, period="1d", interval="1m")
+        if not live.empty:
+            history = pd.concat([history, live[['Close']]]).drop_duplicates()
+            fig_live = px.line(history, y='Close', title=f"{ticker} Live Price")
+            placeholder.plotly_chart(fig_live, use_container_width=True)
+        else:
+            placeholder.write("No live data available.")
+        time.sleep(interval)
