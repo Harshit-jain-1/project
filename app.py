@@ -12,6 +12,7 @@ import streamlit as st
 import yfinance as yf
 import numpy as np
 import pandas as pd
+import pandas_ta as ta
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
@@ -45,7 +46,7 @@ if st.button("Run"):
         close_prices = df['Close'].dropna().astype('float64').values
         # talib requires the input length >= timeperiod, else it errors.
         if len(close_prices) >= 14:
-            rsi = talib.RSI(close_prices, timeperiod=14)
+            df['RSI'] = ta.rsi(df['Close'], length=14)
             # RSI will have NaNs in the first 13 places, pad to original length
             rsi_full = np.empty_like(df['Close'], dtype=float)
             rsi_full[:] = np.nan
