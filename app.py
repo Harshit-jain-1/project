@@ -41,7 +41,18 @@ if st.button("Run"):
 
         # --- Indicators ---
         df['MA50'] = df['Close'].rolling(window=50).mean()
-        df['RSI'] = talib.RSI(df['Close'].astype(float).values, timeperiod=14)
+        # Drop NaNs in 'Close' just before RSI calculation (to avoid errors)
+        close_prices = df['Close'].dropna().astype('float64').values
+        # talib requires the input length >= timeperiod, else it errors.
+        if len(close_prices) >= 14:
+            rsi = talib.RSI(close_prices, timeperiod=14)
+            # RSI will have NaNs in the first 13 places, pad to original length
+            rsi_full = np.empty_like(df['Close'], dtype=float)
+            rsi_full[:] = np.nan
+            rsi_full[-len(rsi):] = rsi
+            df['RSI'] = rsi_full
+        else:
+            df['RSI'] = np.nan  # not enough data for RSI
 
         # --- Plot Price + MA50 ---
         st.subheader("📊 Close Price with MA50")
