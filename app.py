@@ -18,7 +18,6 @@ from tensorflow.keras.models import load_model
 st.set_page_config(page_title="Stock Price Forecast", layout="wide")
 st.title("📈 Stock Trend & LSTM Price Prediction App")
 
-# Manual RSI function (avoids TA-Lib dependency)
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0)
@@ -29,12 +28,10 @@ def calculate_rsi(series, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-# --- User Inputs ---
 ticker = st.text_input("Enter Stock Ticker", "AAPL")
 start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
 end_date = st.date_input("End Date", pd.to_datetime("today"))
 
-# --- Load Model ---
 @st.cache_resource
 def load_lstm_model():
     return load_model("lstm_stock_model.h5")
@@ -47,13 +44,9 @@ if st.button("Run"):
     else:
         st.success(f"Loaded {len(df)} rows for {ticker}.")
 
-        # Calculate MA50
         df['MA50'] = df['Close'].rolling(window=50).mean()
-
-        # Calculate RSI manually
         df['RSI'] = calculate_rsi(df['Close'])
 
-        # --- Plot Close + MA50 ---
         st.subheader("📊 Close Price with MA50")
         fig1, ax1 = plt.subplots(figsize=(10, 4))
         ax1.plot(df.index, df['Close'], label="Close Price")
@@ -63,7 +56,6 @@ if st.button("Run"):
         ax1.legend()
         st.pyplot(fig1)
 
-        # --- Plot RSI ---
         st.subheader("📉 RSI Indicator")
         fig2, ax2 = plt.subplots(figsize=(10, 3))
         ax2.plot(df.index, df['RSI'], label="RSI", color="purple")
@@ -74,22 +66,18 @@ if st.button("Run"):
         ax2.legend()
         st.pyplot(fig2)
 
-        # --- LSTM Prediction ---
-        st.subheader("🤖 LSTM Stock Price Prediction")
-
-        data = df.filter(['Close'])
+        data = df.filter(['Close']).dropna()  # <-- DROP NaNs here
         dataset = data.values
-        training_data_len = int(np.ceil(len(dataset) * 0.8))
 
         if len(dataset) < 60:
             st.warning("Not enough data to run LSTM prediction (need at least 60 data points).")
         else:
-            # Scale data
             scaler = MinMaxScaler(feature_range=(0, 1))
             scaled_data = scaler.fit_transform(dataset)
 
-            # Create test data set
+            training_data_len = int(np.ceil(len(dataset) * 0.8))
             test_data = scaled_data[training_data_len - 60:]
+
             X_test = []
             for i in range(60, len(test_data)):
                 X_test.append(test_data[i-60:i, 0])
@@ -103,7 +91,7 @@ if st.button("Run"):
             valid = data.iloc[training_data_len:].copy()
             valid['Predictions'] = predictions
 
-            # --- Plot prediction vs actual ---
+            st.subheader("🤖 LSTM Stock Price Prediction")
             fig3, ax3 = plt.subplots(figsize=(10, 4))
             ax3.plot(data.index, data['Close'], label='Actual Price')
             ax3.plot(valid.index, valid['Predictions'], label='Predicted Price', color='orange')
