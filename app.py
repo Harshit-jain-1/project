@@ -13,12 +13,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
+import time
 
-# Page config
+# Page setup
 st.set_page_config(page_title="Stock Price Forecast", layout="wide")
 st.title("📈 Stock Trend & LSTM Price Prediction App")
 
-# Manual RSI calculation
+# --- Function to calculate RSI manually ---
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0)
@@ -29,15 +30,17 @@ def calculate_rsi(series, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
+# --- Load model only once ---
 @st.cache_resource
 def load_lstm_model():
     return load_model("lstm_stock_model.h5")
 
-# Inputs
+# --- User Inputs ---
 ticker = st.text_input("Enter Stock Ticker", "AAPL")
 start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
 end_date = st.date_input("End Date", pd.to_datetime("today"))
 
+# --- Run button ---
 if st.button("Run"):
     df = yf.download(ticker, start=start_date, end=end_date)
 
@@ -48,7 +51,7 @@ if st.button("Run"):
     df['MA50'] = df['Close'].rolling(50).mean()
     df['RSI'] = calculate_rsi(df['Close'])
 
-    # Plot Close + MA50
+    # --- Plot Close + MA50 ---
     st.subheader("Close Price with MA50")
     fig1, ax1 = plt.subplots(figsize=(10, 4))
     ax1.plot(df.index, df['Close'], label='Close')
@@ -56,7 +59,7 @@ if st.button("Run"):
     ax1.legend()
     st.pyplot(fig1)
 
-    # Plot RSI
+    # --- Plot RSI ---
     st.subheader("RSI Indicator")
     fig2, ax2 = plt.subplots(figsize=(10, 3))
     ax2.plot(df.index, df['RSI'], label='RSI', color='purple')
@@ -66,15 +69,13 @@ if st.button("Run"):
     ax2.legend()
     st.pyplot(fig2)
 
-    # Prepare for LSTM prediction
+    # --- LSTM Prediction ---
     data = df[['Close']].dropna()
     dataset = data.values.astype('float64')
 
-    # Eliminate NaN or inf values, if any
     dataset = dataset[~np.isnan(dataset).any(axis=1)]
     dataset = dataset[~np.isinf(dataset).any(axis=1)]
 
-    # Ensure 2D structure
     if dataset.ndim == 1:
         dataset = dataset.reshape(-1, 1)
 
@@ -90,7 +91,7 @@ if st.button("Run"):
 
     X_test = []
     for i in range(60, len(test_data)):
-        X_test.append(test_data[i-60:i, 0])
+        X_test.append(test_data[i - 60:i, 0])
     X_test = np.array(X_test).reshape(-1, 60, 1)
 
     model = load_lstm_model()
@@ -106,3 +107,37 @@ if st.button("Run"):
     ax3.legend()
     st.pyplot(fig3)
 
+# =======================
+# 📡 LIVE GRAPH SECTION
+# =======================
+
+st.subheader("📡 Live Stock Price Chart (1-minute updates)")
+
+interval = st.slider("Update interval (seconds):", 5, 60, 10)
+placeholder = st.empty()
+max_points = 100
+
+if st.checkbox("Start Live Chart"):
+    while True:
+        try:
+            live_data = yf.download(ticker, period="1d", interval="1m")
+
+            if not live_data.empty:
+                live_data = live_data.tail(max_points)
+
+                fig_live, ax_live = plt.subplots(figsize=(10, 3))
+                ax_live.plot(live_data.index, live_data['Close'], label="Live Close Price")
+                ax_live.set_xlabel("Time")
+                ax_live.set_ylabel("Price ($)")
+                ax_live.set_title(f"{ticker.upper()} - Real-time Price")
+                ax_live.legend()
+
+                placeholder.pyplot(fig_live)
+            else:
+                placeholder.warning("No live data available.")
+
+            time.sleep(interval)
+
+        except Exception as e:
+            st.error(f"Live update failed: {e}")
+            break
