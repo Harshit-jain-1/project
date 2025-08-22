@@ -7,7 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/10PxcgO5FADLWop7whV-nQNxydZm18kGi
 """
 
-
 import streamlit as st
 import yfinance as yf
 import numpy as np
@@ -16,7 +15,6 @@ import pandas_ta as ta
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
-import talib
 
 st.set_page_config(page_title="Stock Price Forecast", layout="wide")
 st.title("📈 Stock Trend & LSTM Price Prediction App")
@@ -42,18 +40,12 @@ if st.button("Run"):
 
         # --- Indicators ---
         df['MA50'] = df['Close'].rolling(window=50).mean()
-        # Drop NaNs in 'Close' just before RSI calculation (to avoid errors)
-        close_prices = df['Close'].dropna().astype('float64').values
-        # talib requires the input length >= timeperiod, else it errors.
-        if len(close_prices) >= 14:
+
+        # Calculate RSI using pandas_ta (pure python)
+        if len(df) >= 14:
             df['RSI'] = ta.rsi(df['Close'], length=14)
-            # RSI will have NaNs in the first 13 places, pad to original length
-            rsi_full = np.empty_like(df['Close'], dtype=float)
-            rsi_full[:] = np.nan
-            rsi_full[-len(rsi):] = rsi
-            df['RSI'] = rsi_full
         else:
-            df['RSI'] = np.nan  # not enough data for RSI
+            df['RSI'] = np.nan
 
         # --- Plot Price + MA50 ---
         st.subheader("📊 Close Price with MA50")
@@ -78,39 +70,37 @@ if st.button("Run"):
 
         # --- LSTM Prediction ---
         st.subheader("🤖 LSTM Stock Price Prediction")
-        
-        # Use only Close price
+
         data = df.filter(['Close'])
         dataset = data.values
         training_data_len = int(np.ceil(len(dataset) * 0.8))
 
-        # Scale
-        scaler = MinMaxScaler(feature_range=(0,1))
-        scaled_data = scaler.fit_transform(dataset)
+        if len(dataset) < 60:
+            st.warning("Not enough data for LSTM prediction (need at least 60 data points).")
+        else:
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            scaled_data = scaler.fit_transform(dataset)
 
-        # Create test data
-        test_data = scaled_data[training_data_len - 60:]
-        X_test = []
-        for i in range(60, len(test_data)):
-            X_test.append(test_data[i-60:i, 0])
-        X_test = np.array(X_test)
-        X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+            test_data = scaled_data[training_data_len - 60:]
+            X_test = []
+            for i in range(60, len(test_data)):
+                X_test.append(test_data[i - 60:i, 0])
+            X_test = np.array(X_test)
+            X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 
-        # Predict
-        model = load_lstm_model()
-        predictions = model.predict(X_test)
-        predictions = scaler.inverse_transform(predictions)
+            model = load_lstm_model()
+            predictions = model.predict(X_test)
+            predictions = scaler.inverse_transform(predictions)
 
-        # Create final prediction df
-        valid = data[training_data_len:]
-        valid['Predictions'] = predictions
+            valid = data.iloc[training_data_len:].copy()
+            valid['Predictions'] = predictions
 
-        # --- Plot predictions vs actual ---
-        fig3, ax3 = plt.subplots()
-        ax3.plot(data.index, data['Close'], label='Actual')
-        ax3.plot(valid.index, valid['Predictions'], label='Predicted', color='orange')
-        ax3.set_title("LSTM Prediction vs Actual")
-        ax3.set_xlabel("Date")
-        ax3.set_ylabel("Price ($)")
-        ax3.legend()
-        st.pyplot(fig3)
+            # --- Plot predictions vs actual ---
+            fig3, ax3 = plt.subplots()
+            ax3.plot(data.index, data['Close'], label='Actual')
+            ax3.plot(valid.index, valid['Predictions'], label='Predicted', color='orange')
+            ax3.set_title("LSTM Prediction vs Actual")
+            ax3.set_xlabel("Date")
+            ax3.set_ylabel("Price ($)")
+            ax3.legend()
+            st.pyplot(fig3)
