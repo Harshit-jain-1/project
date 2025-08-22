@@ -11,10 +11,10 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
 import time
-import matplotlib.dates as mdates  # For formatting dates on live plot
 
 # Page setup
 st.set_page_config(page_title="Stock Price Forecast", layout="wide")
@@ -129,7 +129,7 @@ if st.checkbox("Start Live Chart"):
                 fig_live, ax_live = plt.subplots(figsize=(10, 3))
                 ax_live.plot(live_data.index, live_data['Close'], label="Live Close Price")
 
-                # Format x-axis with proper time format
+                # Format x-axis with time (HH:MM:SS)
                 ax_live.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
                 fig_live.autofmt_xdate()
 
@@ -139,7 +139,7 @@ if st.checkbox("Start Live Chart"):
                 ax_live.legend()
 
                 placeholder.pyplot(fig_live)
-                plt.close(fig_live)  # avoid memory leaks
+                plt.close(fig_live)  # Close figure to avoid memory leaks
 
             else:
                 placeholder.warning("No live data available.")
@@ -149,3 +149,4 @@ if st.checkbox("Start Live Chart"):
         except Exception as e:
             st.error(f"Live update failed: {e}")
             break
+
