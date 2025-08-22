@@ -11,43 +11,33 @@ Original file is located at
 import streamlit as st
 import yfinance as yf
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
-import matplotlib.pyplot as plt
+import talib  # for RSI if you wish
 
-st.title("Stock Price Prediction")
+st.title("Stock Trend & LSTM Prediction App")
 
-# Load pre-trained model
-model = load_model("lstm_stock_model.h5")
+ticker = st.text_input("Stock Symbol:", "AAPL")
+start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
+end_date = st.date_input("End Date", pd.to_datetime("today"))
 
-# Download stock data
-df = yf.download('AAPL', start='2015-01-01', end='2025-01-01')[['Close']].dropna()
-
-# Scale data
-scaler = MinMaxScaler()
-scaled_data = scaler.fit_transform(df)
-
-SEQ_LENGTH = 60
-
-def create_sequences(data, seq_length=SEQ_LENGTH):
-    X = []
-    for i in range(seq_length, len(data)):
-        X.append(data[i - seq_length:i, 0])
-    return np.array(X)
-
-X = create_sequences(scaled_data)
-X = X.reshape((X.shape[0], X.shape[1], 1))
-
-# Predict
-predicted = model.predict(X)
-predicted = scaler.inverse_transform(predicted)
-actual = scaler.inverse_transform(scaled_data[SEQ_LENGTH:])
-
-# Plot
-st.subheader("Actual vs Predicted Prices")
-fig, ax = plt.subplots()
-ax.plot(actual, label='Actual')
-ax.plot(predicted, label='Predicted')
-ax.legend()
-st.pyplot(fig)
+if st.button("Run"):
+    df = yf.download(ticker, start=start_date, end=end_date)
+    st.write("Data Head:", df.head())
+    
+    df['MA50'] = df['Close'].rolling(50).mean()
+    df['RSI'] = talib.RSI(df['Close'], timeperiod=14)
+    
+    fig, ax = plt.subplots()
+    ax.plot(df['Close'], label="Close")
+    ax.plot(df['MA50'], label="MA 50")
+    ax.legend()
+    st.pyplot(fig)
+    
+    model = load_model("lstm_model.h5")
+    scaler = MinMaxScaler()
+    # Prepare data for LSTM (similar to training pipeline)
+    # Predict and plot actual vs. predicted...
 
