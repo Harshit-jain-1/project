@@ -18,6 +18,7 @@ from tensorflow.keras.models import load_model
 st.set_page_config(page_title="Stock Price Forecast", layout="wide")
 st.title("📈 Stock Trend & LSTM Price Prediction App")
 
+
 def calculate_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0)
@@ -28,25 +29,30 @@ def calculate_rsi(series, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-ticker = st.text_input("Enter Stock Ticker", "AAPL")
-start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
-end_date = st.date_input("End Date", pd.to_datetime("today"))
 
 @st.cache_resource
 def load_lstm_model():
     return load_model("lstm_stock_model.h5")
 
+
+# --- User Inputs ---
+ticker = st.text_input("Enter Stock Ticker", "AAPL")
+start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
+end_date = st.date_input("End Date", pd.to_datetime("today"))
+
 if st.button("Run"):
     df = yf.download(ticker, start=start_date, end=end_date)
 
     if df.empty:
-        st.error("No data found. Check ticker symbol or date range.")
+        st.error("No data found. Check ticker or date range.")
     else:
         st.success(f"Loaded {len(df)} rows for {ticker}.")
 
+        # Indicators
         df['MA50'] = df['Close'].rolling(window=50).mean()
         df['RSI'] = calculate_rsi(df['Close'])
 
+        # --- Plot: Close Price + MA50 ---
         st.subheader("📊 Close Price with MA50")
         fig1, ax1 = plt.subplots(figsize=(10, 4))
         ax1.plot(df.index, df['Close'], label="Close Price")
@@ -56,6 +62,7 @@ if st.button("Run"):
         ax1.legend()
         st.pyplot(fig1)
 
+        # --- Plot: RSI ---
         st.subheader("📉 RSI Indicator")
         fig2, ax2 = plt.subplots(figsize=(10, 3))
         ax2.plot(df.index, df['RSI'], label="RSI", color="purple")
@@ -66,19 +73,13 @@ if st.button("Run"):
         ax2.legend()
         st.pyplot(fig2)
 
-       if st.button("Run"):
-    df = yf.download(ticker, start=start_date, end=end_date)
+        # --- LSTM Prediction ---
+        st.subheader("🤖 LSTM Stock Price Prediction")
 
-    if df.empty:
-        st.error("No data found. Check ticker or date range.")
-    else:
-        st.success(f"Loaded {len(df)} rows for {ticker}.")
-
-        # Prepare data for LSTM prediction
         data = df.filter(['Close']).dropna()
+        dataset = data.values
 
         # Remove any rows with NaN or inf in dataset
-        dataset = data.values
         dataset = dataset[~np.isnan(dataset).any(axis=1)]
         dataset = dataset[~np.isinf(dataset).any(axis=1)]
 
@@ -104,7 +105,7 @@ if st.button("Run"):
             valid = data.iloc[training_data_len:].copy()
             valid['Predictions'] = predictions
 
-            st.subheader("🤖 LSTM Stock Price Prediction")
+            # --- Plot Predictions vs Actual ---
             fig3, ax3 = plt.subplots(figsize=(10, 4))
             ax3.plot(data.index, data['Close'], label='Actual Price')
             ax3.plot(valid.index, valid['Predictions'], label='Predicted Price', color='orange')
@@ -113,3 +114,4 @@ if st.button("Run"):
             ax3.set_ylabel("Price ($)")
             ax3.legend()
             st.pyplot(fig3)
+
