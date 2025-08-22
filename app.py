@@ -37,7 +37,12 @@ def load_lstm_model():
     return load_model("lstm_stock_model.h5")
 
 # --- User Inputs ---
-ticker = st.text_input("Enter Stock Ticker", "AAPL")
+ticker = st.text_input("Enter Stock Ticker", value="AAPL", key="ticker_input")
+
+# Show Yahoo Finance link for the entered ticker
+if ticker:
+    stock_link = f"https://finance.yahoo.com/quote/{ticker.upper()}"
+    st.markdown(f"[🔗 View {ticker.upper()} on Yahoo Finance]({stock_link})", unsafe_allow_html=True)
 start_date = st.date_input("Start Date", pd.to_datetime("2015-01-01"))
 end_date = st.date_input("End Date", pd.to_datetime("today"))
 
