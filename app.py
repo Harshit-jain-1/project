@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 st.title("Stock Price Prediction")
 
 # Load pre-trained model
-model = load_model("/lstm_stock_model.h5")
+model = load_model("lstm_stock_model.h5")
 
 # Download stock data
 df = yf.download('AAPL', start='2015-01-01', end='2025-01-01')[['Close']].dropna()
