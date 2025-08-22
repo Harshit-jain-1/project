@@ -11,13 +11,23 @@ import streamlit as st
 import yfinance as yf
 import numpy as np
 import pandas as pd
-import pandas_ta as ta
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
 
 st.set_page_config(page_title="Stock Price Forecast", layout="wide")
 st.title("📈 Stock Trend & LSTM Price Prediction App")
+
+# Manual RSI function (avoids TA-Lib dependency)
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(window=period, min_periods=period).mean()
+    avg_loss = loss.rolling(window=period, min_periods=period).mean()
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
 
 # --- User Inputs ---
 ticker = st.text_input("Enter Stock Ticker", "AAPL")
@@ -29,28 +39,24 @@ end_date = st.date_input("End Date", pd.to_datetime("today"))
 def load_lstm_model():
     return load_model("lstm_stock_model.h5")
 
-# --- On Button Click ---
 if st.button("Run"):
     df = yf.download(ticker, start=start_date, end=end_date)
 
     if df.empty:
-        st.error("No data found. Check ticker or date range.")
+        st.error("No data found. Check ticker symbol or date range.")
     else:
         st.success(f"Loaded {len(df)} rows for {ticker}.")
 
-        # --- Indicators ---
+        # Calculate MA50
         df['MA50'] = df['Close'].rolling(window=50).mean()
 
-        # Calculate RSI using pandas_ta (pure python)
-        if len(df) >= 14:
-            df['RSI'] = ta.rsi(df['Close'], length=14)
-        else:
-            df['RSI'] = np.nan
+        # Calculate RSI manually
+        df['RSI'] = calculate_rsi(df['Close'])
 
-        # --- Plot Price + MA50 ---
+        # --- Plot Close + MA50 ---
         st.subheader("📊 Close Price with MA50")
-        fig1, ax1 = plt.subplots()
-        ax1.plot(df.index, df['Close'], label="Close")
+        fig1, ax1 = plt.subplots(figsize=(10, 4))
+        ax1.plot(df.index, df['Close'], label="Close Price")
         ax1.plot(df.index, df['MA50'], label="MA50")
         ax1.set_xlabel("Date")
         ax1.set_ylabel("Price ($)")
@@ -59,7 +65,7 @@ if st.button("Run"):
 
         # --- Plot RSI ---
         st.subheader("📉 RSI Indicator")
-        fig2, ax2 = plt.subplots()
+        fig2, ax2 = plt.subplots(figsize=(10, 3))
         ax2.plot(df.index, df['RSI'], label="RSI", color="purple")
         ax2.axhline(70, linestyle="--", color="red")
         ax2.axhline(30, linestyle="--", color="green")
@@ -76,15 +82,17 @@ if st.button("Run"):
         training_data_len = int(np.ceil(len(dataset) * 0.8))
 
         if len(dataset) < 60:
-            st.warning("Not enough data for LSTM prediction (need at least 60 data points).")
+            st.warning("Not enough data to run LSTM prediction (need at least 60 data points).")
         else:
+            # Scale data
             scaler = MinMaxScaler(feature_range=(0, 1))
             scaled_data = scaler.fit_transform(dataset)
 
+            # Create test data set
             test_data = scaled_data[training_data_len - 60:]
             X_test = []
             for i in range(60, len(test_data)):
-                X_test.append(test_data[i - 60:i, 0])
+                X_test.append(test_data[i-60:i, 0])
             X_test = np.array(X_test)
             X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 
@@ -95,11 +103,11 @@ if st.button("Run"):
             valid = data.iloc[training_data_len:].copy()
             valid['Predictions'] = predictions
 
-            # --- Plot predictions vs actual ---
-            fig3, ax3 = plt.subplots()
-            ax3.plot(data.index, data['Close'], label='Actual')
-            ax3.plot(valid.index, valid['Predictions'], label='Predicted', color='orange')
-            ax3.set_title("LSTM Prediction vs Actual")
+            # --- Plot prediction vs actual ---
+            fig3, ax3 = plt.subplots(figsize=(10, 4))
+            ax3.plot(data.index, data['Close'], label='Actual Price')
+            ax3.plot(valid.index, valid['Predictions'], label='Predicted Price', color='orange')
+            ax3.set_title("LSTM Prediction vs Actual Price")
             ax3.set_xlabel("Date")
             ax3.set_ylabel("Price ($)")
             ax3.legend()
