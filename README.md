@@ -1,8 +1,8 @@
 # Stock Price Trend Prediction Using LSTM – Project Report
-________________________________________
+
 # Introduction
 In the world of financial markets, predicting stock prices is a challenging yet crucial task. With the rise of machine learning and deep learning, time-series models like Long Short-Term Memory (LSTM) networks have proven effective in modeling sequential data, such as stock prices. This project aims to leverage LSTM networks to predict future stock price trends based on historical data.
-________________________________________
+
 # Tools Used
 •	Programming Language: Python
 •	Libraries & Frameworks:
@@ -12,7 +12,7 @@ o	matplotlib, seaborn – Visualization
 o	scikit-learn – Data normalization
 o	TensorFlow/Keras – Building and training the LSTM model
 o	Streamlit (optional) – For web dashboard deployment
-________________________________________
+
 # Steps Involved in Building the Project
 1.	Data Collection:
 o	Used the yfinance API to fetch historical stock data (e.g., AAPL from 2015–2025).
@@ -39,6 +39,6 @@ How It Works:
 •	The Streamlit app fetches live stock data using the yfinance API.
 •	Real-time charts are generated using matplotlib or plotly.
 •	The LSTM model loads saved weights and predicts the next price values based on the most recent data.
-________________________________________
+
 # Conclusion
 The project successfully demonstrates the use of LSTM neural networks in predicting stock prices based on historical trends. While the model does not guarantee exact price values (as markets are influenced by numerous unpredictable factors), it effectively captures general trends. Integrating technical indicators like MA and RSI provides additional insights, making this system potentially useful for traders and analysts. Further improvements can include tuning hyperparameters, incorporating news sentiment analysis, or expanding to multivariate input features.
